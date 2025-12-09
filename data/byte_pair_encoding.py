@@ -150,4 +150,3 @@ def get_byte_to_char_mapping():
         
         # return output map
         return byte_to_char
-
