@@ -6,7 +6,7 @@ class Decoder(nn.Module):
     """
     Decoder block
     """
-    def __init__(self, d_model, num_heads, d_ff, dropout):
+    def __init__(self, d_model, num_heads, d_ff, dropout, device):
         super().__init__()
         # save parameters
         self.d_model = d_model
@@ -18,8 +18,8 @@ class Decoder(nn.Module):
         self.dropout_two = torch.nn.Dropout(dropout)
         self.layer_norm_one = torch.nn.LayerNorm(d_model)
         self.layer_norm_two = torch.nn.LayerNorm(d_model)
-        self.self_attention = MultiHeadedAttention(d_model, num_heads)
-        self.feed_forward = FeedForward(d_ff)
+        self.self_attention = MultiHeadedAttention(d_model, num_heads, dropout, device)
+        self.feed_forward = FeedForward(d_model, d_ff, torch.nn.GELU)
 
     def forward(self, x):
         # apply first layers
@@ -33,7 +33,7 @@ class Decoder(nn.Module):
         # apply the rest of the layers
         temp = self.layer_norm_two(x)
         temp = self.feed_forward(temp)
-        temp = self.dropout_one(temp)
+        temp = self.dropout_two(temp)
 
         # add residual and return
         x = x + temp
@@ -44,19 +44,21 @@ class MultiHeadedAttention(nn.Module):
     """
     Class for multi-headed self attention mechanism
     """
-    def __init__(self, d_model, num_heads):
+    def __init__(self, d_model, num_heads, dropout, device):
         super().__init__()
         # store hyperparameters
         self.num_heads = num_heads
         self.d_key = d_model // self.num_heads
         self.d_model = d_model
+        self.device = device
 
         # create the query, key, and value weight matrices
         self.W_q = torch.nn.Linear(d_model, d_model)
         self.W_k = torch.nn.Linear(d_model, d_model)
         self.W_v = torch.nn.Linear(d_model, d_model)
 
-        # create the final output projection matrix
+        # create the final output projection matrix and dropout layer
+        self.dropout = torch.nn.Dropout(dropout)
         self.output_proj = torch.nn.Linear(d_model, d_model)
 
     def forward(self, x):
@@ -81,7 +83,7 @@ class MultiHeadedAttention(nn.Module):
         # need to create casual mask
         casual_mask = torch.fill((seq_len, seq_len), 1)
         casual_mask = torch.triu(casual_mask, diagonal=1)
-        casual_mask = casual_mask.bool()
+        casual_mask = casual_mask.bool().to(self.device)
 
         # calculate attention pattern first
         logits = (Q @ K.transpose(3, 2) / math.sqrt(self.d_key))
@@ -92,10 +94,13 @@ class MultiHeadedAttention(nn.Module):
         # apply softmax
         attn_scores = torch.softmax(logits, dim=-1)
 
+        # apply drop out
+        attn_scores = self.dropout(attn_scores)
+
         # compute output and reshape
         output = attn_scores @ V
         output = output.transpose(2, 1)
-        output.reshape(batch_size, seq_len, self.d_model)
+        output = output.reshape(batch_size, seq_len, self.d_model)
 
         # apply output linear projection matrix
         output = self.output_proj(output)
