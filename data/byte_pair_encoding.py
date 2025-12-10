@@ -1,3 +1,6 @@
+import pickle
+import os
+
 class BytePairTokenizer:
     def __init__(self, text):
         # create mapping from char -> byte and byte -> char
@@ -8,7 +11,7 @@ class BytePairTokenizer:
         self.token_ids = {}
         self.current_id = 0
         for char in self.byte_to_char.values():
-            self.token_ids[self.current_id] = char
+            self.token_ids[char] = self.current_id
             self.current_id += 1
 
         # convert text to mapped characters
@@ -64,6 +67,8 @@ class BytePairTokenizer:
         encoded = []
         # loop through compressed list of tokens
         for token in curr_tokens:
+            if (self.token_ids.get(token) == None):
+                print(token)
             encoded.append(self.token_ids.get(token))
         
         return encoded
@@ -118,6 +123,27 @@ class BytePairTokenizer:
             i += 1
         
         return pairs_dict
+
+    @classmethod
+    def load(cls, save_path):
+        """
+        Loads the tokenizer state and reconstructs the object
+        """
+        # load the saved state from file
+        with open(save_path, 'rb') as f:
+            tokenizer_state = pickle.load(f)
+
+        tokenizer = cls(text="")
+
+        # load the saved data
+        tokenizer.merges = tokenizer_state['merges']
+        tokenizer.token_ids = tokenizer_state['token_to_id']
+        tokenizer.byte_to_char = tokenizer_state['byte_to_char']
+
+        # remember to also store the char to byte dictionary
+        tokenizer.id_to_token = {v: k for k, v in tokenizer.token_ids.items()}
+
+        return tokenizer
 
 def get_byte_to_char_mapping():
         """
