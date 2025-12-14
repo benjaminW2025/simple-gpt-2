@@ -15,6 +15,7 @@ save_dir = os.path.join("..", "files")
 os.makedirs(save_dir, exist_ok=True)
 
 save_path = os.path.join(save_dir, "my_object.pkl")
+model_path = os.path.join(save_dir, "gpt2_model.pt")
 
 # define hyperparameters
 
@@ -24,6 +25,7 @@ LR = 0.0003
 BATCH_SIZE = 32
 D_MODEL = 256
 MAX_LEN = 512
+STRIDE = 256
 VOCAB_SIZE = 5001
 N_LAYERS = 6
 NUM_HEADS = 8
@@ -37,47 +39,17 @@ def main():
     """
     # get device
     device = torch.device("mps")
-
-    # need to import our tokenizer
-    tokenizer = BytePairTokenizer.load(save_path)
-
-    print("tokenizer saved!")
-
-    raw_datasets = load_dataset("wikitext", "wikitext-2-raw-v1")
-
-    # get our data
-    train_text_list = raw_datasets["train"]["text"] 
-    val_text_list = raw_datasets["validation"]["text"]
-
-    train_text_str = "\n".join(train_text_list)
-    val_text_str = "\n".join(val_text_list)
-
-    print("loaded data")
     
-    # encode our data to prepare to run through model
-    encoded_train = tokenizer.encode(train_text_str)
-    encoded_val = tokenizer.encode(val_text_str)
-
-    print("encoded data")
-
     # save each list as a file
     train_path = '../files/encoded_train.pt'
-    val_path = '../files/encoded_val.py'
-
-    train_tensor = torch.tensor(encoded_train, dtype=torch.long)
-    val_tensor = torch.tensor(encoded_val, dtype=torch.long)
-
-    torch.save(train_tensor, train_path)
-    print("Saved encoded training set")
-    torch.save(val_tensor, val_path)
-    print("Saved encoded validation set")
+    val_path = '../files/encoded_val.pt'
 
     # need to first create an instance of the model
     model = GPT2Model(VOCAB_SIZE, N_LAYERS, D_MODEL, NUM_HEADS, D_FF, ACTIVATION, DROPOUT, device, MAX_LEN)
     model = model.to(device)
 
     # create an instance of our dataloader
-    train_dataset = GPTLoader(train_path, MAX_LEN)
+    train_dataset = GPTLoader(train_path, MAX_LEN, 10)
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -97,7 +69,7 @@ def main():
     print("training begun")
 
     train(model, 5, train_dataloader, optimizer, device)
-    print("model trained)")
+    print("model trained")
 
 def train(model, num_epochs, train_loader, optimizer, device):
     # loop for however many epochs
@@ -107,6 +79,8 @@ def train(model, num_epochs, train_loader, optimizer, device):
         # for epoch statistics
         total_loss = 0
         count = 0
+
+        track = 0
 
         # for step statistics
         running_loss = 0
@@ -131,19 +105,24 @@ def train(model, num_epochs, train_loader, optimizer, device):
             optimizer.step()
 
             if (step_count == 100):
+                track += 1
                 avg_loss = running_loss / step_count
-                print(f"Epoch: {epoch} | Average loss for step {step_count}:  {avg_loss:.2f}")
+                print(f"Epoch: {epoch} | Average loss for step {track}:  {avg_loss:.2f}")
 
                 # reset
                 running_loss = 0
                 step_count = 0
         
         epoch_avg_loss = total_loss / count
+        print("----------------------------------------------")
         print(f"Epoch {epoch + 1} average loss:  {epoch_avg_loss:.2f}")
+        print("----------------------------------------------")
 
-        # reset 
+        # reset
         total_loss = 0
         count = 0
+    
+    torch.save(model.state_dict(), model_path)
 
 if __name__ == "__main__":
     main()
