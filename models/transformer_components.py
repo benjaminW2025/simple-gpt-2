@@ -1,12 +1,12 @@
 import math
 import torch
-import torch as nn
+from torch import nn
 
 class Decoder(nn.Module):
     """
     Decoder block
     """
-    def __init__(self, d_model, num_heads, d_ff, dropout, device):
+    def __init__(self, d_model, num_heads, d_ff, activation, dropout, device):
         super().__init__()
         # save parameters
         self.d_model = d_model
@@ -19,7 +19,7 @@ class Decoder(nn.Module):
         self.layer_norm_one = torch.nn.LayerNorm(d_model)
         self.layer_norm_two = torch.nn.LayerNorm(d_model)
         self.self_attention = MultiHeadedAttention(d_model, num_heads, dropout, device)
-        self.feed_forward = FeedForward(d_model, d_ff, torch.nn.GELU)
+        self.feed_forward = FeedForward(d_model, d_ff, activation)
 
     def forward(self, x):
         # apply first layers
@@ -81,7 +81,7 @@ class MultiHeadedAttention(nn.Module):
         V = V.transpose(2, 1)
 
         # need to create casual mask
-        casual_mask = torch.fill((seq_len, seq_len), 1)
+        casual_mask = torch.full((seq_len, seq_len), 1)
         casual_mask = torch.triu(casual_mask, diagonal=1)
         casual_mask = casual_mask.bool().to(self.device)
 
@@ -104,6 +104,8 @@ class MultiHeadedAttention(nn.Module):
 
         # apply output linear projection matrix
         output = self.output_proj(output)
+
+        return output
 
 class FeedForward(nn.Module):
     """
